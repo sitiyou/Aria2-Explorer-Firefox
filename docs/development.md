@@ -1,8 +1,9 @@
 # Browser packages
 
-Requirements: Python 3 and Node.js 22 or later. No application dependencies need to be installed.
+Requirements: Python 3 and Node.js 22 or later. Building the AriaNg frontend uses npm 8.19.4 via npx and downloads the lockfile-pinned dependencies.
 
 ```sh
+python3 tools/build_ariang.py
 node --test tests/*.test.mjs
 python3 tools/build.py
 ```
@@ -62,17 +63,19 @@ browser testing.
 
 ## Release identity and AMO submission
 
-The default Firefox name and extension ID are development placeholders. Before
-publishing, choose a distinct name and a stable ID owned by the fork maintainer:
+The build script defaults to development-only Firefox identity values. The
+release workflow is configured with `Aria2 Explorer (sitiyou's fork)` and
+`aria2-explorer@sitiyou`; confirm the ID is available in AMO before submission.
+Generate the Firefox package and source archive with:
 
 ```sh
-python3 tools/build.py firefox --name 'Your distinct fork name' --gecko-id 'your-id@example.org'
+python3 tools/build.py firefox --name "Aria2 Explorer (sitiyou's fork)" --gecko-id 'aria2-explorer@sitiyou'
+python3 tools/source_package.py
 ```
 
 Keep that ID for subsequent versions. The tagged-release workflow builds both
-browser ZIPs, but does not sign or submit the Firefox package. It uses the
-placeholder identity until the build command is configured for the final fork.
-The Chromium CRX signing step still requires `CHROME_CRX_PRIVATE_KEY`.
+browser ZIPs and a source archive, but does not sign or submit the Firefox
+package. The Chromium CRX signing step still requires `CHROME_CRX_PRIVATE_KEY`.
 
 The Firefox manifest declares transmission of authentication information,
 browsing activity, website content, and website activity because the configured
@@ -82,13 +85,13 @@ Retain the upstream BSD copyright, conditions, disclaimer, and all applicable
 third-party license notices. List the fork maintainer separately from the
 original author.
 
-Before submitting to AMO, audit bundled third-party licenses and provide the
-original sources and reproducible build instructions for the existing minified
-and customized AriaNg frontend and bundled libraries. This repository's package
-builder reproduces the extension ZIP, not those frontend bundles. The frontend
-also contacts upstream announcement services and can display upstream web
-content; review its disclosures, consent, and remote-content behavior against
-AMO policies. These are publication prerequisites, not covered by ZIP generation.
+The extension vendors AriaNg 1.3.15 source in `vendor/ariang/`; run
+`python3 tools/build_ariang.py` before packaging to reproduce the bundled
+frontend. Source submission instructions and third-party library references
+are in `docs/amo-source-submission.md`. The vendored frontend does not fetch
+remote announcements or embed remote pages. Its help link opens the upstream
+repository only after user activation. The build needs network access to npm
+and the pinned Git dependency on its first run.
 
 Official references:
 

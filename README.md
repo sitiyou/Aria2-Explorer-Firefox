@@ -98,11 +98,10 @@ also include your configured aria2 authentication secret. Only use servers you
 trust. Settings are stored locally; uploading settings to browser sync is
 optional and includes configured RPC connection information and secrets.
 
-The bundled frontend also requests announcements from `rec.aria2e.com` and can
-load upstream blog content. Those connections expose ordinary network request
-information to the upstream service. Opening external help links contacts their
-respective websites. The Firefox installation prompt declares the data types
-transmitted for download integration.
+The bundled AriaNg frontend does not fetch remote announcements or embed
+remote pages. Its Help link opens the upstream AriaNg repository only when you
+select it. The Firefox installation prompt declares the data types transmitted
+for download integration.
 
 ## 📜 License
 

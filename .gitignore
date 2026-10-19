@@ -1,3 +1,6 @@
 /build/
 __pycache__/
 /web-ext-artifacts/
+/vendor/ariang/node_modules/
+/vendor/ariang/.tmp/
+/vendor/ariang/dist/

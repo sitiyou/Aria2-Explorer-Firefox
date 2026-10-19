@@ -21,13 +21,17 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Build AriaNg from source
+        run: python3 tools/build_ariang.py
+
       - name: Test
         run: node --test tests/*.test.mjs
 
       - name: Build browser packages
         run: |
-          python3 tools/build.py
+          python3 tools/build.py --name "Aria2 Explorer (sitiyou's fork)" --gecko-id 'aria2-explorer@sitiyou'
           cp build/aria2e-chromium-*.zip build/extension.zip
+          python3 tools/source_package.py
       
       - name: Validate Firefox package
         run: npx --yes web-ext@10.8.0 lint --source-dir build/firefox
@@ -48,3 +52,4 @@ jobs:
             build/aria2e-${{ github.ref_name }}.crx
             build/aria2e-chromium-*.zip
             build/aria2e-firefox-*.zip
+            build/aria2e-source.zip
