@@ -17,13 +17,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
             
-      - name: Zip
-        uses: "cardinalby/webext-buildtools-pack-extension-dir-action@v1"
+      - uses: actions/setup-node@v4
         with:
-          extensionDir: .
-          zipIgnore: ".git|.github|*.crx"
-          zipFilePath: "build/extension.zip"
+          node-version: '22'
+
+      - name: Test
+        run: node --test tests/*.test.mjs
+
+      - name: Build browser packages
+        run: |
+          python3 tools/build.py
+          cp build/aria2e-chromium-*.zip build/extension.zip
       
+      - name: Validate Firefox package
+        run: npx --yes web-ext@10.8.0 lint --source-dir build/firefox
+
       - name: Crx
         uses: "cardinalby/webext-buildtools-chrome-crx-action@v2"
         with:
@@ -36,4 +44,7 @@ jobs:
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
-          files: "build/aria2e-${{ github.ref_name }}.crx"
+          files: |
+            build/aria2e-${{ github.ref_name }}.crx
+            build/aria2e-chromium-*.zip
+            build/aria2e-firefox-*.zip

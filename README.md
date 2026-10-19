@@ -65,6 +65,23 @@ chrome.runtime.sendMessage(`Aria2-Explorer extension ID`, downloadItem)
 
 ## 📥 Installation
 
+### Firefox
+
+This fork adds desktop Firefox support (Firefox 140 or later, including current ESR).
+For a local installation, open `about:debugging#/runtime/this-firefox`, choose
+**Load Temporary Add-on**, and select `build/firefox/manifest.json` from a local
+build. See [development instructions](docs/development.md) to create the package.
+Temporary installations last until Firefox exits; permanent installation requires
+a Mozilla-signed package. This fork is not yet published on AMO.
+
+Firefox supports the native sidebar. System keep-awake is unavailable, and
+unknown-size downloads stay in Firefox when a nonzero size threshold cannot be
+resolved before the download completes.
+
+### Upstream Chromium releases
+
+The following store links install the upstream project, not this Firefox fork.
+
 [![Chrome Web Store](https://developer.chrome.com/static/docs/webstore/branding/image/UV4C4ybeBTsZt43U4xis.png)](https://chrome.google.com/webstore/detail/mpkodccbngfoacfalldjimigbofkhgjn "Aria2 Explorer")
 [<img src="https://get.microsoft.com/images/zh-cn%20light.svg" height=58 >](https://microsoftedge.microsoft.com/addons/detail/ngojgbdekanmijaphecgpmfoegoanffi "Aria2 Explorer")
 
@@ -75,10 +92,22 @@ chrome.runtime.sendMessage(`Aria2-Explorer extension ID`, downloadItem)
 
 ## 🔒 Privacy policy
 
-This extension just captures download tasks and related website cookies from the user's browser for the purpose of connecting to the user's Aria2 server to download the network resources. Any connection and configuration information for Aria2 will be stored locally or can be optionally uploaded to the user's logged-in cloud. This extension does not collect any personal data or network activity from the user, nor will it share any such data with 3rd parties.
+This extension sends download URLs, referrers, filenames, user-agent information,
+and relevant website cookies to the aria2 server you configure. RPC requests may
+also include your configured aria2 authentication secret. Only use servers you
+trust. Settings are stored locally; uploading settings to browser sync is
+optional and includes configured RPC connection information and secrets.
+
+The bundled frontend also requests announcements from `rec.aria2e.com` and can
+load upstream blog content. Those connections expose ordinary network request
+information to the upstream service. Opening external help links contacts their
+respective websites. The Firefox installation prompt declares the data types
+transmitted for download integration.
 
 ## 📜 License
 
 ![BSD](https://i0.wp.com/opensource.org/wp-content/uploads/2006/07/OSI_Approved_License.png?w=90&ssl=1)
 
 Aria2-Explorer is licensed under [BSD 3-Clause License](https://opensource.org/license/bsd-3-clause/).
+This fork is based on Alex Hua's Aria2 Explorer; the original copyright and
+license are retained in [LICENSE](LICENSE).

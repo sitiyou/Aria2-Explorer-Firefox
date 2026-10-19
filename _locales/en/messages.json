@@ -1,4 +1,13 @@
 {
+   "remindCaptureTipSetting": {
+      "message": "Notify when capturing downloads from other extensions"
+   },
+   "unsupportedKeepAwake": {
+      "message": "This browser does not support preventing system sleep."
+   },
+   "firefoxShortcutsHelp": {
+      "message": "Open about:addons, then the extensions settings menu (gear icon) → Manage Extension Shortcuts."
+   },
    "appName": {
       "message": "Aria2 Explorer"
    },

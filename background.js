@@ -1,4 +1,5 @@
 import Utils from "./js/utils.js";
+import DownloadCapture from "./js/downloadCapture.js";
 import Configs from "./js/config.js";
 import Aria2 from "./js/aria2.js";
 import Aria2Options from "./js/aria2Options.js";
@@ -26,7 +27,8 @@ var RemoteAria2List = [];
 const IconAnimController = new AnimationController();
 const ContextMenus = new ContextMenu();
 
-const isDownloadListened = () => chrome.downloads.onDeterminingFilename.hasListener(captureDownload);
+const CaptureDownloads = new DownloadCapture(captureDownload, () => Number(Configs.fileSize));
+const isDownloadListened = () => CaptureDownloads.hasListener();
 
 /**
  * @typedef RpcItem
@@ -55,10 +57,20 @@ const isDownloadListened = () => chrome.downloads.onDeterminingFilename.hasListe
     registerAllListeners();
 })()
 
+function browserDownloadOptions(downloadItem, url = downloadItem.url) {
+    const options = { url };
+    if (!downloadItem.multiTask && downloadItem.filename) options.filename = downloadItem.filename;
+    if (Utils.isFirefox) {
+        options.incognito = downloadItem.incognito ?? chrome.extension.inIncognitoContext;
+        if (downloadItem.cookieStoreId) options.cookieStoreId = downloadItem.cookieStoreId;
+    }
+    return options;
+}
+
 /**
- * Invoke a download task 
- * 
- * @param {DownloadItem} downloadItem 
+ * Invoke a download task
+ *
+ * @param {DownloadItem} downloadItem
  * @param {RpcItem} rpcItem
  * @returns {Promise<boolean>} the result of creating download task
  */
@@ -79,10 +91,10 @@ async function download(downloadItem, rpcItem) {
             if (downloadItem.multiTask) {
                 let urls = downloadItem.url.split('\n');
                 for (const url of urls) {
-                    await chrome.downloads.download({ url });
+                    await chrome.downloads.download(browserDownloadOptions(downloadItem, url));
                 }
             } else {
-                await chrome.downloads.download({ url: downloadItem.url, filename: downloadItem.filename });
+                await chrome.downloads.download(browserDownloadOptions(downloadItem));
             }
         } catch {
             result = false;
@@ -109,13 +121,26 @@ async function download(downloadItem, rpcItem) {
 
 async function getCookies(downloadItem) {
     try {
-        let storeId = (downloadItem.incognito || chrome.extension.inIncognitoContext) ? "1" : "0";
+        let storeId = Utils.isFirefox
+            ? downloadItem.cookieStoreId || ((downloadItem.incognito || chrome.extension.inIncognitoContext) ? 'firefox-private' : 'firefox-default')
+            : (downloadItem.incognito || chrome.extension.inIncognitoContext) ? "1" : "0";
         let url = downloadItem.multiTask ? downloadItem.referrer : downloadItem.url;
-        let cookies = await chrome.cookies.getAll({ url, storeId });
+        const details = { url, storeId };
+        let cookies;
+        try {
+            cookies = await chrome.cookies.getAll(details);
+        } catch (error) {
+            if (!Utils.isFirefox) throw error;
+            details.firstPartyDomain = new URL(downloadItem.referrer || url).hostname;
+            cookies = await chrome.cookies.getAll(details);
+        }
         let partitionedCookies = [];
 
         try {
-            partitionedCookies = await chrome.cookies.getAll({ url, storeId, partitionKey: {} });
+            const partitionKey = Utils.isFirefox
+                ? { topLevelSite: new URL(downloadItem.referrer || url).origin }
+                : {};
+            partitionedCookies = await chrome.cookies.getAll({ ...details, partitionKey });
         } catch {
             // Ignore browsers that do not support partitionKey.
         }
@@ -269,18 +294,14 @@ function shouldCapture(downloadItem) {
 }
 
 function enableCapture() {
-    if (!isDownloadListened()) {
-        chrome.downloads.onDeterminingFilename.addListener(captureDownload);
-    }
+    CaptureDownloads.addListener();
     IconManager.turnOn();
     Configs.integration = true;
     ContextMenus.update("MENU_CAPTURE_DOWNLOAD", { checked: true });
 }
 
 function disableCapture() {
-    if (isDownloadListened()) {
-        chrome.downloads.onDeterminingFilename.removeListener(captureDownload);
-    }
+    CaptureDownloads.removeListener();
     IconManager.turnOff(Configs.iconOffStyle);
     Configs.integration = false;
     ContextMenus.update("MENU_CAPTURE_DOWNLOAD", { checked: false });
@@ -291,7 +312,7 @@ async function captureDownload(downloadItem, suggest) {
         // TODO: Filename assigned by chrome.downloads.download() was not passed in
         // and will be discarded by Chrome. No solution or workaround right now. The
         // only way is disabling capture before other extensions call chrome.downloads.download().
-        suggest();
+        suggest?.();
         const title = chrome.i18n.getMessage("RemindCaptureTip");
         const message = chrome.i18n.getMessage("RemindCaptureTipDes");
         const requireInteraction = true;
@@ -308,10 +329,12 @@ async function captureDownload(downloadItem, suggest) {
         downloadItem.url = downloadItem.finalUrl;
     }
     if (Configs.integration && shouldCapture(downloadItem)) {
-        chrome.downloads.cancel(downloadItem.id).then(() => {
-            if (chrome.runtime.lastError)
-                chrome.runtime.lastError = null;
-        });
+        try {
+            await chrome.downloads.cancel(downloadItem.id);
+        } catch (error) {
+            console.warn('Download cancellation failed:', error);
+            return;
+        }
         if (downloadItem.referrer == "about:blank") {
             downloadItem.referrer = "";
         }
@@ -320,24 +343,29 @@ async function captureDownload(downloadItem, suggest) {
         let successful = await download(downloadItem, rpcItem);
 
         if (!successful && Utils.isLocalhost(rpcItem.url)) {
-            disableCapture();
-            chrome.downloads.download({ url: downloadItem.url }).then(enableCapture);
+            successful = await download({ ...downloadItem, type: 'DOWNLOAD_VIA_BROWSER' }, rpcItem);
+        }
+        if (Utils.isFirefox && successful) {
+            await chrome.downloads.erase({ id: downloadItem.id });
         }
     }
 }
 
 async function launchUI(info) {
+    const incognito = info?.incognito ?? chrome.extension.inIncognitoContext;
     const index = chrome.runtime.getURL('ui/ariang/index.html');
     let webUiUrl = index + '#!'; // launched from notification, option menu or browser toolbar icon
 
     let sidePanelOpened = false;
     if (Configs.webUIOpenStyle == "sidePanel") {
         try {
-            if (info && 'id' in info) {
+            if (Utils.isFirefox) {
+                await chrome.sidebarAction.open();
+            } else if (info && typeof info === 'object' && 'id' in info) {
                 await chrome.sidePanel.open({ tabId: info.id });
             } else {
                 await chrome.sidePanel.open({ windowId: CurrentWindowId });
-            };
+            }
             sidePanelOpened = true;
         } catch {
             sidePanelOpened = false;
@@ -371,7 +399,10 @@ async function launchUI(info) {
     }
 
     if (sidePanelOpened) {
-        if (info && 'id' in info) {
+        if (Utils.isFirefox) {
+            const scope = Number.isInteger(info?.id) ? { tabId: info.id } : { windowId: CurrentWindowId };
+            await chrome.sidebarAction.setPanel({ ...scope, panel: webUiUrl });
+        } else if (info && typeof info === 'object' && 'id' in info) {
             await chrome.sidePanel.setOptions({ tabId: info.id, path: webUiUrl });
         } else {
             await chrome.sidePanel.setOptions({ path: webUiUrl });
@@ -379,36 +410,47 @@ async function launchUI(info) {
     } else if (Configs.webUIOpenStyle === "popup") {
         const popupUrl = chrome.runtime.getURL('ui/ariang/popup.html');
         await chrome.action.setPopup({ popup: webUiUrl.replace('index', 'popup') });
-        await chrome.action.openPopup();
-        await chrome.action.setPopup({ popup: popupUrl });
+        try {
+            await chrome.action.openPopup();
+        } catch {
+            await createUITab(webUiUrl, incognito);
+        } finally {
+            await chrome.action.setPopup({ popup: popupUrl });
+        }
     } else {
-        chrome.tabs.query({ "url": index }).then(function (tabs) {
-            if (tabs?.length > 0) {
-                chrome.windows.update(tabs[0].windowId, {
-                    focused: true
-                });
-                let prop = { active: true };
-                if (webUiUrl != index) prop.url = webUiUrl;
-                chrome.tabs.update(tabs[0].id, prop);
-                return;
-            }
-            if (Configs.webUIOpenStyle == "window") {
-                openInWindow(webUiUrl);
-            } else {
-                chrome.tabs.create({
-                    url: webUiUrl
-                });
-            }
-        });
+        let tabs = await chrome.tabs.query({ "url": index });
+        if (Utils.isFirefox) tabs = tabs.filter(tab => tab.incognito === incognito);
+        if (tabs?.length > 0) {
+            await chrome.windows.update(tabs[0].windowId, { focused: true });
+            let prop = { active: true };
+            if (webUiUrl != index) prop.url = webUiUrl;
+            await chrome.tabs.update(tabs[0].id, prop);
+            return;
+        }
+        if (Configs.webUIOpenStyle == "window") {
+            await openInWindow(webUiUrl, incognito);
+        } else {
+            await createUITab(webUiUrl, incognito);
+        }
     }
 
 }
 
-async function openInWindow(url) {
+async function createUITab(url, incognito) {
+    if (!Utils.isFirefox) return chrome.tabs.create({ url });
+    const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+    const matchingWindows = windows.filter(window => window.incognito === incognito);
+    const window = matchingWindows.find(window => window.focused) || matchingWindows[0];
+    if (window) return chrome.tabs.create({ url, windowId: window.id });
+    return chrome.windows.create({ url, incognito });
+}
+
+async function openInWindow(url, incognito) {
 
     const STORAGE_KEY = 'uiWindowBounds';
     const { [STORAGE_KEY]: savedBounds } = await chrome.storage.local.get(STORAGE_KEY);
     const defaultProps = { url, type: 'popup', focused: false, width: 1024, height: 600 };
+    if (Utils.isFirefox) defaultProps.incognito = incognito;
     const windowProps = savedBounds ? { ...defaultProps, ...savedBounds } : defaultProps;
 
     let win;
@@ -561,7 +603,7 @@ function onMenuClick(info, tab) {
     const referrer = info.frameUrl || info.pageUrl;
     const filename = '';
     // mock a DownloadItem
-    let downloadItem = { url, referrer, filename, incognito: tab.incognito };
+    let downloadItem = { url, referrer, filename, incognito: tab.incognito, cookieStoreId: tab.cookieStoreId };
 
     if (info.menuItemId == "MENU_OPEN_WEB_UI") {
         launchUI(tab);
@@ -683,10 +725,8 @@ function disableMonitor() {
     chrome.action.setTitle({ title: "" });
     Configs.monitorAria2 = false;
     ContextMenus.update("MENU_MONITOR_ARIA2", { checked: false });
-    if (Configs.integration && !isDownloadListened()) {
-        chrome.downloads.onDeterminingFilename.addListener(captureDownload);
-    }
-    chrome.power.releaseKeepAwake();
+    if (Configs.integration) CaptureDownloads.addListener();
+    chrome.power?.releaseKeepAwake();
 }
 
 async function monitorAria2() {
@@ -709,9 +749,7 @@ async function monitorAria2() {
             waiting += Number(response.result.numWaiting);
             uploadSpeed += Number(response.result.uploadSpeed);
             downloadSpeed += Number(response.result.downloadSpeed);
-            if (Configs.integration && i == 0 && !isDownloadListened()) {
-                chrome.downloads.onDeterminingFilename.addListener(captureDownload);
-            }
+            if (Configs.integration && i == 0) CaptureDownloads.addListener();
 
             // Only for default aria2, needs Aria2 enhanced version
             const percent = response.result.percentActive;
@@ -727,7 +765,7 @@ async function monitorAria2() {
                     errorMessage = "Aria2 server is unreachable";
 
                 if (Configs.monitorAria2 && Configs.integration && isDownloadListened()) {
-                    chrome.downloads.onDeterminingFilename.removeListener(captureDownload);
+                    CaptureDownloads.removeListener();
                 }
             }
         } finally {
@@ -743,16 +781,16 @@ async function monitorAria2() {
             MonitorId = setInterval(monitorAria2, MonitorInterval);
         }
         if (Configs.keepAwake && localConnected > 0)
-            chrome.power.requestKeepAwake("system");
+            chrome.power?.requestKeepAwake("system");
         else
-            chrome.power.releaseKeepAwake();
+            chrome.power?.releaseKeepAwake();
     } else if (active == 0) {
         if (MonitorInterval == INTERVAL_SHORT) {
             MonitorInterval = INTERVAL_LONG;
             clearInterval(MonitorId);
             MonitorId = setInterval(monitorAria2, MonitorInterval);
         }
-        chrome.power.releaseKeepAwake();
+        chrome.power?.releaseKeepAwake();
         if (waiting > 0) {
             IconAnimController.start('Pause');
         }
@@ -784,7 +822,7 @@ async function monitorAria2() {
         let finishStr = chrome.i18n.getMessage("finish");
         title += `${downloadStr}: ${active}  ${waitStr}: ${waiting}  ${finishStr}: ${stopped}\n${uploadStr}: ${uploadSpeed}  ${downloadStr}: ${downloadSpeed}`;
     } else {
-        if (localConnected == 0) chrome.power.releaseKeepAwake();
+        if (localConnected == 0) chrome.power?.releaseKeepAwake();
         bgColor = "#A83030" // red;
         text = 'E';
         if (Configs.monitorAll)
@@ -794,7 +832,7 @@ async function monitorAria2() {
     }
 
     if (Configs.monitorAria2) {
-        chrome.action.setBadgeTextColor({ color: textColor });
+        chrome.action.setBadgeTextColor?.({ color: textColor });
         chrome.action.setBadgeBackgroundColor({ color: bgColor });
         chrome.action.setBadgeText({ text });
         chrome.action.setTitle({ title });
@@ -803,6 +841,13 @@ async function monitorAria2() {
 
 async function resetSidePanel(tabId) {
     if (Configs.webUIOpenStyle == "sidePanel") {
+        if (Utils.isFirefox) {
+            const panel = await chrome.sidebarAction.getPanel({ tabId });
+            if (!panel.endsWith('ui/ariang/index.html')) {
+                await chrome.sidebarAction.setPanel({ tabId, panel: null });
+            }
+            return;
+        }
         let { path } = await chrome.sidePanel.getOptions(tabId ? { tabId } : undefined);
         const defaultPath = 'ui/ariang/index.html';
         if (!path.endsWith(defaultPath)) {
@@ -831,6 +876,7 @@ function registerAllListeners() {
     });
 
     chrome.windows.onFocusChanged.addListener(function (windowId) {
+        if (windowId === chrome.windows.WINDOW_ID_NONE) return;
         CurrentWindowId = windowId;
         chrome.tabs.query({ windowId: windowId, active: true }).then(function (tabs) {
             if (tabs?.length > 0) {
@@ -841,7 +887,7 @@ function registerAllListeners() {
     });
 
     /* Cache popup window bounds to memory on move/resize (no storage IO) */
-    chrome.windows.onBoundsChanged.addListener(function (win) {
+    chrome.windows.onBoundsChanged?.addListener(function (win) {
         if (win.id === UIWindowId) {
             UIWindowBounds = { left: win.left, top: win.top, width: win.width, height: win.height };
         }
@@ -858,10 +904,11 @@ function registerAllListeners() {
     chrome.notifications.onClicked.addListener(function (id) {
         if (id.startsWith(NID_TASK_NEW) || id.startsWith(NID_TASK_STOPPED))
             launchUI(id);
+        if (Utils.isFirefox && id === NID_CAPTURED_OTHERS) chrome.runtime.openOptionsPage();
         chrome.notifications.clear(id);
     });
 
-    chrome.notifications.onButtonClicked.addListener(function (nid, buttonIndex) {
+    chrome.notifications.onButtonClicked?.addListener(function (nid, buttonIndex) {
         if (nid == NID_CAPTURED_OTHERS) {
             switch (buttonIndex) {
                 case 0:
@@ -915,11 +962,14 @@ function registerAllListeners() {
             switch (message.type) {
                 case "DOWNLOAD":
                 case "EXPORT_ALL":
-                    download(message.data);
+                    download({ ...message.data, incognito: sender.tab?.incognito ?? chrome.extension.inIncognitoContext,
+                        cookieStoreId: sender.tab?.cookieStoreId });
                     break;
                 case "DOWNLOAD_VIA_BROWSER":
                     let downloadItem = message.data || {};
                     downloadItem.type = "DOWNLOAD_VIA_BROWSER";
+                    downloadItem.incognito ??= sender.tab?.incognito ?? chrome.extension.inIncognitoContext;
+                    downloadItem.cookieStoreId ??= sender.tab?.cookieStoreId;
                     download(downloadItem);
                     break;
                 case "QUERY_WINDOW_STATE":
@@ -977,7 +1027,7 @@ function init() {
             Configs.integration ? enableCapture() : disableCapture();
             Configs.monitorAria2 ? enableMonitor() : disableMonitor();
         });
-        chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: Configs.webUIOpenStyle == "sidePanel" });
+        chrome.sidePanel?.setPanelBehavior({ openPanelOnActionClick: Configs.webUIOpenStyle == "sidePanel" });
     });
 }
 

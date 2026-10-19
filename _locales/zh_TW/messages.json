@@ -1,4 +1,13 @@
 {
+   "remindCaptureTipSetting": {
+      "message": "接管其他擴充套件的下載時提醒"
+   },
+   "unsupportedKeepAwake": {
+      "message": "此瀏覽器不支援防止系統休眠。"
+   },
+   "firefoxShortcutsHelp": {
+      "message": "開啟 about:addons，點選擴充套件設定選單（齒輪圖示），選擇「管理擴充套件快速鍵」。"
+   },
    "appName": {
       "message": "Aria2 Explorer"
    },

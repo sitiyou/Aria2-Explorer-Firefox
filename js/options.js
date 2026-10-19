@@ -62,6 +62,14 @@ var Configs =
         }
 
 
+        if (!chrome.power?.requestKeepAwake) {
+            $('#keepAwake').prop('disabled', true).prop('checked', false);
+            $('#monitorAria2').off('change').change(() => $('#keepAwake').prop('disabled', true));
+            $('label[for=keepAwake] .unsupported-capability').remove();
+            $('label[for=keepAwake]').append($('<small>').addClass('unsupported-capability d-block text-muted')
+                .text(chrome.i18n.getMessage('unsupportedKeepAwake')));
+        }
+
         for (const input of $("input[type=text],input[type=number]")) {
             if (Configs[input.id])
                 input.value = Configs[input.id];
@@ -152,6 +160,10 @@ var Configs =
         }
 
         $("#shortcuts-setting").off().on("click", function () {
+            if (Utils.isFirefox) {
+                alert(chrome.i18n.getMessage('firefoxShortcutsHelp'));
+                return;
+            }
             chrome.tabs.query({ "url": SHORTCUTS_PAGE_URL }).then(function (tabs) {
                 if (tabs?.length > 0) {
                     chrome.windows.update(tabs[0].windowId, {
@@ -252,7 +264,7 @@ var Configs =
             tempSet.delete("");
             Configs[textarea.id] = Array.from(tempSet);
         }
-        chrome.storage.local.set(Configs);
+        chrome.storage.local.set(storedConfigs());
     },
     upload: function () {
         try {
@@ -270,7 +282,7 @@ var Configs =
             if (!confirm(str))
                 return;
         }
-        chrome.storage.sync.set(Configs).then(() => {
+        chrome.storage.sync.set(storedConfigs()).then(() => {
             let str = chrome.i18n.getMessage("uploadConfigSucceed");
             Configs.notifySyncResult(str, "alert-success");
         }).catch(error => {
@@ -301,7 +313,7 @@ var Configs =
                     console.warn("Download: AriaNG options is invalid.");
                 }
                 Object.assign(Configs, configs);
-                await chrome.storage.local.set(Configs);
+                await chrome.storage.local.set(storedConfigs());
                 let str = chrome.i18n.getMessage("downloadConfigSucceed");
                 Configs.notifySyncResult(str, "alert-success");
             } else {
@@ -394,7 +406,7 @@ var Configs =
 
                 Object.assign(Configs, DefaultConfigs, configData);
 
-                await chrome.storage.local.set(Configs);
+                await chrome.storage.local.set(storedConfigs());
 
                 await Configs.init();
 
@@ -412,6 +424,10 @@ var Configs =
         event.target.value = '';
     }
 };
+
+function storedConfigs() {
+    return Object.fromEntries(Object.entries(Configs).filter(([, value]) => typeof value !== 'function'));
+}
 
 window.onload = Configs.init;
 window.matchMedia('(prefers-color-scheme: dark)').onchange = setColorMode;
@@ -550,6 +566,6 @@ function markRpc(event) {
     let rpcIndex = event.delegateTarget.id.split('-')[1];
     if (rpcIndex in Configs.rpcList) {
         Configs.rpcList[rpcIndex].ignoreInsecure = !Configs.rpcList[rpcIndex].ignoreInsecure;
-        chrome.storage.local.set(Configs);
+        chrome.storage.local.set(storedConfigs());
     }
 }

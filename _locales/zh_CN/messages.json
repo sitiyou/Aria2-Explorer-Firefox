@@ -1,4 +1,13 @@
 {
+   "remindCaptureTipSetting": {
+      "message": "接管其他扩展的下载时提醒"
+   },
+   "unsupportedKeepAwake": {
+      "message": "此浏览器不支持阻止系统休眠。"
+   },
+   "firefoxShortcutsHelp": {
+      "message": "打开 about:addons，点击扩展设置菜单（齿轮图标），选择“管理扩展快捷键”。"
+   },
    "appName": {
       "message": "Aria2 Explorer"
    },

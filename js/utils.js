@@ -1,6 +1,7 @@
 import { DefaultAriaNgOptions } from "./config.js";
 
 class Utils {
+    static isFirefox = typeof browser !== 'undefined' && typeof browser.runtime?.getBrowserInfo === 'function';
     /**
     * export rpc list to ariaNG options
     * 
@@ -247,11 +248,19 @@ class Utils {
             requireInteraction: false
         };
         Object.assign(option, content);
-        chrome.notifications.create(id, option);
+        if (Utils.isFirefox) {
+            if (option.contextMessage) option.message += '\n' + option.contextMessage;
+            delete option.contextMessage;
+            delete option.buttons;
+            delete option.requireInteraction;
+            delete option.silent;
+        }
+        chrome.notifications.create(id, option).catch(error => console.warn('Notification failed:', error));
     }
 
     static getWebStoreUrl() {
         let id = chrome.runtime.id;
+        if (Utils.isFirefox) return 'https://addons.mozilla.org/firefox/';
         if (/Edg/.test(navigator.userAgent))
             return "https://microsoftedge.microsoft.com/addons/detail/" + id;
         else
@@ -293,7 +302,10 @@ class Utils {
      * @return {string} OS platform name
      */
     static getPlatform() {
-        return navigator.userAgentData.platform;
+        if (navigator.userAgentData?.platform) return navigator.userAgentData.platform;
+        if (/Win/.test(navigator.userAgent)) return 'Windows';
+        if (/Mac/.test(navigator.userAgent)) return 'macOS';
+        return 'Linux';
     }
 }
 
