@@ -66,13 +66,15 @@ test('settings persistence excludes functions required only by the options UI', 
 });
 
 
-test('RPC changes synchronize AriaNg automatically, including initial settings', () => {
+test('RPC changes synchronize AriaNg automatically, including initial settings', async () => {
     let onChanged;
     const localStorage = {};
     const context = vm.createContext({
         console, URL, btoa, localStorage,
+        $: () => Object.assign([], { val: () => undefined }),
         window: { matchMedia: () => ({}) },
         chrome: { i18n: { getMessage: key => key }, storage: {
+            local: { set: async () => {} },
             onChanged: { addListener(listener) { onChanged = listener; } }
         } }
     });
@@ -98,6 +100,11 @@ test('RPC changes synchronize AriaNg automatically, including initial settings',
     assert.equal(options.rpcAlias, 'Second');
     assert.equal(options.extendRpcServers[0].rpcAlias, 'First');
     assert.equal(options.language, 'zh_Hans');
+    delete localStorage['AriaNg.Options'];
+    await vm.runInContext('Configs.save();', context);
+    options = JSON.parse(localStorage['AriaNg.Options']);
+    assert.equal(options.rpcHost, 'localhost');
+    assert.equal(options.rpcPort, '6800');
     assert.equal(context.isRpcListChanged({ rpcList: { oldValue: second,
         newValue: second.map(server => ({ ...server, pattern: '' })) } }), true);
 });

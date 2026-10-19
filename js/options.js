@@ -264,7 +264,7 @@ var Configs =
             tempSet.delete("");
             Configs[textarea.id] = Array.from(tempSet);
         }
-        chrome.storage.local.set(storedConfigs());
+        return chrome.storage.local.set(storedConfigs()).then(() => syncRpcToAriaNg(Configs.rpcList));
     },
     upload: function () {
         try {
@@ -441,17 +441,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         }
         Configs.init();
         if (isRpcListChanged(changes)) {
-            let oldAriaNgOptions = localStorage[AriaNgOptionsKey];
-            let ariaNgOptions = null;
-            try {
-                ariaNgOptions = JSON.parse(oldAriaNgOptions);
-            } catch (error) {
-                console.warn("The stored AriaNG options is null or invalid.")
-            }
-            let newAriaNgOptions = JSON.stringify(Utils.exportRpcToAriaNg(changes.rpcList.newValue, ariaNgOptions));
-            if (newAriaNgOptions != oldAriaNgOptions) {
-                localStorage[AriaNgOptionsKey] = newAriaNgOptions;
-            }
+            syncRpcToAriaNg(changes.rpcList.newValue);
         }
     }
 });
@@ -479,6 +469,20 @@ window.onkeyup = function (e) {
             button = document.getElementById("importConfig");
         }
         button?.focus({ focusVisible: true });
+    }
+}
+
+function syncRpcToAriaNg(rpcList) {
+    const storedOptions = localStorage[AriaNgOptionsKey];
+    let options = null;
+    try {
+        options = JSON.parse(storedOptions || 'null');
+    } catch {
+        console.warn("The stored AriaNG options is invalid.");
+    }
+    const updatedOptions = JSON.stringify(Utils.exportRpcToAriaNg(rpcList, options));
+    if (updatedOptions !== storedOptions) {
+        localStorage[AriaNgOptionsKey] = updatedOptions;
     }
 }
 

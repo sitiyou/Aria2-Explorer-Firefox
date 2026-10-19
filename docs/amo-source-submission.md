@@ -4,7 +4,8 @@ The Firefox package embeds AriaNg 1.3.15 from the upstream source release at
 https://github.com/mayswind/AriaNg/tree/1.3.15. Its source, MIT license,
 `package.json`, and lockfile are included in `vendor/ariang/`. The source
 changes add AngularJS's `ng-csp` directive and use a fixed build identifier so
-the output is reproducible without Git metadata. The Firefox extension settings
+the output is reproducible without Git metadata. The AngularJS link whitelist
+also permits Firefox and Chromium extension URLs for task navigation. The Firefox extension settings
 integration uses AriaNg's existing `AriaNg.Options` local-storage key and
 `extendRpcServers` option format.
 

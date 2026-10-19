@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
+import vm from 'node:vm';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
@@ -29,4 +30,26 @@ test('bundled AriaNg contains no remote announcement or recommendation content',
     assert.doesNotMatch(manifest.content_security_policy.extension_pages, /aria2e\.com/);
     assert.doesNotMatch(index, /rec\.aria2e\.com|recommend\.html|<iframe/i);
     assert.doesNotMatch(javascript, /rec\.aria2e\.com|aria2eRecService|recommend\.html/);
+});
+
+
+test('AriaNg trusts extension task links without trusting executable URLs', async () => {
+    let whitelist;
+    const module = { config(providers) {
+        if (providers[0] === '$compileProvider') {
+            providers.at(-1)({ aHrefSanitizationWhitelist(value) { whitelist = value; } });
+        }
+        return module;
+    } };
+    vm.runInNewContext(await read('vendor/ariang/src/scripts/config/configuration.js'), {
+        angular: { module: () => module }
+    });
+    for (const url of ['moz-extension://test/index.html#!/task/detail/123',
+        'chrome-extension://test/index.html#!/task/detail/123', 'https://example.org',
+        'mailto:test@example.org']) {
+        assert.equal(whitelist.test(url), true, url);
+    }
+    for (const url of ['javascript:alert(1)', 'data:text/html,test', 'vbscript:test']) {
+        assert.equal(whitelist.test(url), false, url);
+    }
 });

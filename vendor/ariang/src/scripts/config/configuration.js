@@ -1,6 +1,10 @@
 (function () {
     'use strict';
 
+    angular.module('ariaNg').config(['$compileProvider', function ($compileProvider) {
+        $compileProvider.aHrefSanitizationWhitelist(/^\s*(https?|s?ftp|mailto|tel|file|chrome-extension|moz-extension):/);
+    }]);
+
     angular.module('ariaNg').config(['$qProvider', '$translateProvider', 'localStorageServiceProvider', 'NotificationProvider', 'ariaNgConstants', 'ariaNgLanguages', function ($qProvider, $translateProvider, localStorageServiceProvider, NotificationProvider, ariaNgConstants, ariaNgLanguages) {
         $qProvider.errorOnUnhandledRejections(false);
 
