@@ -64,3 +64,40 @@ test('settings persistence excludes functions required only by the options UI', 
     assert.equal(Object.values(snapshot).some(value => typeof value === 'function'), false);
     assert.doesNotThrow(() => structuredClone(snapshot));
 });
+
+
+test('RPC changes synchronize AriaNg automatically, including initial settings', () => {
+    let onChanged;
+    const localStorage = {};
+    const context = vm.createContext({
+        console, URL, btoa, localStorage,
+        window: { matchMedia: () => ({}) },
+        chrome: { i18n: { getMessage: key => key }, storage: {
+            onChanged: { addListener(listener) { onChanged = listener; } }
+        } }
+    });
+    for (const file of ['config.js', 'utils.js', 'options.js']) {
+        const source = readFileSync(new URL(`../js/${file}`, import.meta.url), 'utf8')
+            .replace(/^import .*;\r?$/gm, '')
+            .replace(/^export default .*;\r?$/gm, '')
+            .replace(/^export /gm, '');
+        vm.runInContext(source, context);
+    }
+    vm.runInContext('Configs.init = () => {};', context);
+    const first = [{ name: 'First', url: 'http://token:secret@localhost:6801/jsonrpc', pattern: '' }];
+    onChanged({ rpcList: { newValue: first }, ariaNgOptions: { newValue: {} } }, 'local');
+    let options = JSON.parse(localStorage['AriaNg.Options']);
+    assert.equal(options.rpcAlias, 'First');
+    assert.equal(options.rpcPort, '6801');
+    assert.equal(options.secret, btoa('secret'));
+    options.language = 'zh_Hans';
+    localStorage['AriaNg.Options'] = JSON.stringify(options);
+    const second = [...first, { name: 'Second', url: 'http://localhost:6802/jsonrpc', pattern: '*' }];
+    onChanged({ rpcList: { oldValue: first, newValue: second } }, 'local');
+    options = JSON.parse(localStorage['AriaNg.Options']);
+    assert.equal(options.rpcAlias, 'Second');
+    assert.equal(options.extendRpcServers[0].rpcAlias, 'First');
+    assert.equal(options.language, 'zh_Hans');
+    assert.equal(context.isRpcListChanged({ rpcList: { oldValue: second,
+        newValue: second.map(server => ({ ...server, pattern: '' })) } }), true);
+});
