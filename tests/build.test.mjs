@@ -22,6 +22,9 @@ test('browser packages preserve Chromium and supply a separate Firefox manifest'
     }
     assert.equal(firefox.permissions.includes('power'), false);
     assert.equal(firefox.permissions.includes('sidePanel'), false);
+    assert.equal(firefox.browser_specific_settings.gecko.id, 'aria2-explorer@sitiyou');
+    assert.equal(readJSON('build/firefox/_locales/en/messages.json').appName.message,
+        "Aria2 Explorer (sitiyou's fork)");
     assert.equal(firefox.browser_specific_settings.gecko.strict_min_version, '140.0');
     assert.equal(firefox.browser_specific_settings.gecko.data_collection_permissions.required.includes('authenticationInfo'), true);
     assert.notEqual(readJSON('build/firefox/_locales/en/messages.json').appName.message,

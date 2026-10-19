@@ -63,13 +63,12 @@ browser testing.
 
 ## Release identity and AMO submission
 
-The build script defaults to development-only Firefox identity values. The
-release workflow is configured with `Aria2 Explorer (sitiyou's fork)` and
-`aria2-explorer@sitiyou`; confirm the ID is available in AMO before submission.
-Generate the Firefox package and source archive with:
+The build script defaults to the fork identity `Aria2 Explorer (sitiyou's fork)`
+and Gecko ID `aria2-explorer@sitiyou`. Confirm the ID is available in AMO before
+submission. Generate the Firefox package and source archive with:
 
 ```sh
-python3 tools/build.py firefox --name "Aria2 Explorer (sitiyou's fork)" --gecko-id 'aria2-explorer@sitiyou'
+python3 tools/build.py firefox
 python3 tools/source_package.py
 ```
 

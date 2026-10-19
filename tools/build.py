@@ -69,8 +69,8 @@ def build(browser, gecko_id, name):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('browser', choices=['chromium', 'firefox', 'all'], nargs='?', default='all')
-    parser.add_argument('--gecko-id', default='aria2-explorer-firefox-fork@local.invalid')
-    parser.add_argument('--name', default='Aria2 Explorer Fork (Development)')
+    parser.add_argument('--gecko-id', default='aria2-explorer@sitiyou')
+    parser.add_argument('--name', default="Aria2 Explorer (sitiyou's fork)")
     arguments = parser.parse_args()
     browsers = ('chromium', 'firefox') if arguments.browser == 'all' else (arguments.browser,)
     for browser in browsers:
