@@ -27,7 +27,12 @@ function background(firefox = true) {
         },
         cookies: { getAll: async details => { calls.push(['cookies', details]); return []; } },
         tabs: { query: async () => [], create: async options => calls.push(['tab', options]) },
-        windows: { getAll: async () => [{ id: 1, incognito: false, focused: true }, { id: 2, incognito: true }] },
+        storage: { local: { get: async () => ({}) } },
+        windows: {
+            getAll: async () => [{ id: 1, incognito: false, focused: true }, { id: 2, incognito: true }],
+            create: async options => { calls.push(['window', options]); return { id: 4 }; },
+            update: async (id, options) => calls.push(['updateWindow', id, options])
+        },
         i18n: { getMessage: key => key }
     };
     const context = vm.createContext({
@@ -124,6 +129,56 @@ test('private UI requests do not reuse a normal browsing tab', async () => {
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(calls[0][0], 'tab');
     assert.equal(calls[0][1].windowId, 2);
+});
+
+test('closing a window during creation never creates a replacement', async () => {
+    for (const firefox of [true, false]) {
+        for (const bounds of [undefined, { left: 10, top: 20, width: 800, height: 600 }]) {
+            const { context, chrome, Configs, calls } = background(firefox);
+            Configs.webUIOpenStyle = 'window';
+            chrome.storage.local.get = async () => ({ uiWindowBounds: bounds });
+            let rejectCreation;
+            const creation = new Promise((resolve, reject) => { rejectCreation = reject; });
+            let started;
+            const starting = new Promise(resolve => { started = resolve; });
+            chrome.windows.create = options => {
+                calls.push(['window', options]);
+                started();
+                return creation;
+            };
+            const opening = context.launchUI();
+            await starting;
+            rejectCreation(new Error('window closed during creation'));
+            await assert.rejects(opening, /window closed during creation/);
+            assert.equal(calls.filter(call => call[0] === 'window').length, 1);
+        }
+    }
+});
+
+test('saved window bounds are restored without retrying window creation', async () => {
+    for (const firefox of [true, false]) {
+        const { context, chrome, Configs, calls } = background(firefox);
+        Configs.webUIOpenStyle = 'window';
+        const bounds = { left: 10, top: 20, width: 800, height: 700 };
+        chrome.storage.local.get = async () => ({ uiWindowBounds: bounds });
+        await context.launchUI({ incognito: true });
+        assert.deepEqual(calls.map(call => call[0]), ['window', 'updateWindow']);
+        assert.equal(calls[0][1].width, 1024);
+        assert.equal(calls[0][1].incognito, firefox ? true : undefined);
+        assert.equal(calls[1][1], 4);
+        assert.equal(calls[0][1].focused, true);
+        assert.deepEqual({ ...calls[1][2] }, bounds);
+    }
+});
+
+test('a bounds update failure does not reopen the window', async () => {
+    const { context, chrome, Configs, calls } = background();
+    Configs.webUIOpenStyle = 'window';
+    chrome.storage.local.get = async () => ({ uiWindowBounds: { width: 800, height: 700 } });
+    context.console = { warn() {} };
+    chrome.windows.update = async () => { throw new Error('window already closed'); };
+    await context.launchUI();
+    assert.equal(calls.filter(call => call[0] === 'window').length, 1);
 });
 
 test('Firefox sidebar requests without user activation fall back to a tab', async () => {

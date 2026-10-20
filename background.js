@@ -449,18 +449,17 @@ async function openInWindow(url, incognito) {
 
     const STORAGE_KEY = 'uiWindowBounds';
     const { [STORAGE_KEY]: savedBounds } = await chrome.storage.local.get(STORAGE_KEY);
-    const defaultProps = { url, type: 'popup', focused: false, width: 1024, height: 600 };
-    if (Utils.isFirefox) defaultProps.incognito = incognito;
-    const windowProps = savedBounds ? { ...defaultProps, ...savedBounds } : defaultProps;
-
-    let win;
-    try {
-        win = await chrome.windows.create(windowProps);
-    } catch (error) {
-        win = await chrome.windows.create(defaultProps);
-    }
+    const windowProps = { url, type: 'popup', focused: true, width: 1024, height: 600 };
+    if (Utils.isFirefox) windowProps.incognito = incognito;
+    const win = await chrome.windows.create(windowProps);
     UIWindowId = win.id;
-    chrome.windows.update(win.id, { focused: true });
+    if (savedBounds) {
+        try {
+            await chrome.windows.update(win.id, savedBounds);
+        } catch (error) {
+            console.warn('UI window bounds could not be restored:', error);
+        }
+    }
 }
 
 function createRpcOptionsMenu() {
