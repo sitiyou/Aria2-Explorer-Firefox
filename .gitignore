@@ -1,4 +1,5 @@
 /build/
+/AGENTS.md
 __pycache__/
 /web-ext-artifacts/
 /vendor/ariang/node_modules/
